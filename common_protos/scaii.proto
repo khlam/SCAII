@@ -275,4 +275,5 @@ message GameComplete {}
 
 message ReplaySessionConfig {
 	required int64 step_count = 1;
+	repeated ExplanationPoint explanations = 5;
 }

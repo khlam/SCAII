@@ -180,6 +180,49 @@ function drawDiamond(ctx, x, y, baseLen, rotation_in_radians, colorRGBA) {
   ctx.restore();
 }
 
+
+function drawNonGradientDiamond(ctx, x, y, baseLen, rotation_in_radians, colorRGBA) {
+  var sizeFudgeFactor = 1.4; // with math below, diamond is too small so just boost the baselen so we can keep the math simple later
+  baseLen = baseLen * sizeFudgeFactor;
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.rotate(rotation_in_radians);
+  x = 0;
+  y = 0;
+  var radians = 60 * Math.PI / 180;
+  var height = (Math.tan(radians) * baseLen) / 2;
+ // var yTip = y - height / 2;
+ // var yBottom = y + height / 2;
+ // var xTip = x;
+  var yTip = y;
+  var yBottom = y;
+  var xTip = x + height / 2;
+  var xBottom = x - height / 2;
+  var xLeftWing = x - height / 4;
+  var yLeftWing = y - baseLen / 3;
+  var xRightWing = x - height / 4;
+  var yRightWing = y + baseLen / 3;
+  
+  ctx.beginPath();
+  ctx.moveTo(xTip, yTip);
+  ctx.lineTo(xLeftWing, yLeftWing);
+  ctx.lineTo(xBottom, yBottom);
+  ctx.lineTo(xRightWing, yRightWing);
+  ctx.closePath();
+
+  // the outline
+  ctx.lineWidth = shape_outline_width;
+  ctx.strokeStyle = shape_outline_color;
+  if (use_shape_color_for_outline) {
+    ctx.strokeStyle = colorRGBA;
+  }
+  ctx.stroke();
+
+  // the fill color
+  ctx.fillStyle = colorRGBA;
+  ctx.fill();
+  ctx.restore();
+}
 function layoutEntityAtPosition(ctx, x, y, entity, zoom_factor, xOffset, yOffset, shapePositionMap) {
   var final_x = (x - xOffset) * zoom_factor;
   var final_y = (y - yOffset) * zoom_factor;

@@ -16,6 +16,7 @@ goog.require('proto.scaii.common.CoreEndpoint');
 goog.require('proto.scaii.common.Endpoint');
 goog.require('proto.scaii.common.Entity');
 goog.require('proto.scaii.common.Error');
+goog.require('proto.scaii.common.ExplanationPoint');
 goog.require('proto.scaii.common.InitAs');
 goog.require('proto.scaii.common.ModuleCfg');
 goog.require('proto.scaii.common.ModuleEndpoint');
@@ -71,9 +72,13 @@ var secondaryHighlightedShapeIds = [];
 // Create the gameboard canvas
 var gameboard_canvas = document.createElement("canvas");
 var gameboard_ctx = gameboard_canvas.getContext("2d");
+gameboard_canvas.setAttribute("class", "primary_canvas");
 
 var gameboard_zoom_canvas = document.createElement("canvas");
 var gameboard_zoom_ctx = gameboard_zoom_canvas.getContext("2d");
+
+var gameboard_overlay_canvas = document.createElement("canvas");
+gameboard_overlay_canvas.setAttribute("class", "overlay_canvas;primary_canvas");
 
 gameboard_canvas.addEventListener('click', function(event) {
   if (event.shiftKey){
@@ -181,7 +186,7 @@ function handleViz(vizData){
   //console.log('received Viz...');
   entitiesList = vizData.getEntitiesList();
   var step = vizData.getStep();
-  //console.log("step in vizData was " + step+ "maxStep is " + maxStep);
+  console.log("step in vizData was " + step+ "maxStep is " + maxStep);
   updateProgress(step, maxStep);
   
   handleEntities(entitiesList);
@@ -191,6 +196,9 @@ function handleViz(vizData){
   if (vizData.hasChart()){
 	  var chartInfo = vizData.getChart();
 	  renderChartInfo(chartInfo, gameboardHeight);
+  }
+  if (step == 0){
+	  pauseGame();
   }
 }
 function handleEntities(entitiesList) {
@@ -327,9 +335,18 @@ var initUI = function(){
 	controlsManager.setControlsNotReady();
 	gameboard_canvas.width = 400;
 	gameboard_canvas.height = 400;
+	gameboard_overlay_canvas.width = gameboard_canvas.width;
+	gameboard_overlay_canvas.height = gameboard_canvas.height;
 	gameboard_zoom_canvas.width = gameboard_canvas.width;
 	gameboard_zoom_canvas.height = gameboard_canvas.height;
 	$("#scaii-gameboard").append(gameboard_canvas);
+	
+	
+	$("#scaii-gameboard").append(gameboard_overlay_canvas);
+	//drawNonGradientDiamond(gameboard_overlay_canvas.getContext("2d"), 100, 100, 80, 1.0, getBasicColorRGBA());
+	//drawNonGradientDiamond(gameboard_overlay_canvas.getContext("2d"), 100, 100, 80, 1.0, "rgba(200,200,200,0.1)");
+	//renderSaliencyTest();
+	//renderHeatMap2();
 	$("#scaii-gameboard").css("width", gameboard_canvas.width);
 	$("#scaii-gameboard").css("height", gameboard_canvas.height);
 	$("#scaii-gameboard").css("background-color", "#123456");
@@ -441,6 +458,12 @@ var initUI = function(){
 	$("#scaii-zoom-controls").append(zoomSlider); 
 	
 	$("#game-progress").click(processTimelineClick);
+	
+	// saliency explanations
+	$("#saliency-unittype-check")[0].onclick = renderSaliency;
+	console.log("unittype is checked " + $("#saliency-unittype-check")[0].checked);
+	$("#saliency-hitpoints-check")[0].onclick = renderSaliency;
+	$("#saliency-enemyfriendly-check")[0].onclick = renderSaliency;
 }
 function clearGameBoards(){
   clearGameBoard(gameboard_ctx,gameboard_canvas, "game");

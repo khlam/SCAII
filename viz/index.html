@@ -112,6 +112,14 @@
   height: 15px;
   background-color: #4CAF50;
 }*/
+
+.overlay_canvas {
+  background-color: transparent;
+  
+}
+.primary_canvas{
+  position: absolute;
+}
 </style>
 	</head>
 	<body>
@@ -126,11 +134,29 @@
 					<progress id="game-progress" value="00" max="99"></progress>
 				</div>
 				<div id="scaii-game-controls"></div>
+				<div id="saliency-checkboxes">
+				<!--<fieldset>-->
+					<legend>Saliency</legend>
+					<div>
+						<input type="checkbox" id="saliency-unittype-check" name="interest" value="unittype">
+						<label for="saliency-unittype-check">Unit type</label>
+					</div>
+					<div>
+						<input type="checkbox" id="saliency-hitpoints-check" name="interest" value="hitpoints">
+						<label for="saliency-hitpoints-check">Hit points</label>
+					</div>
+					<div>
+						<input type="checkbox" id="saliency-enemyfriendly-check" name="interest" value="enemyfriendly">
+						<label for="saliency-enemyfriendly-check">Enemy vs Friendly</label>
+					</div>
+				<!--</fieldset>-->
+				</div>
 			</div>
 			<div id="scaii-explanations">
 				<div id="explanations-interface-title"></div>
 				<div id="scaii-gameboard-zoom"></div>
 				<div id="scaii-zoom-controls"></div>
+				
 			</div>
 		</div>
 		<script src="js/scaiiViz.js"></script>

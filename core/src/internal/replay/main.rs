@@ -5,7 +5,7 @@ extern crate prost;
 extern crate url;
 
 use prost::Message;
-use protos::{scaii_packet, AgentCfg, AgentEndpoint, cfg, Cfg, CoreEndpoint, Entity,
+use protos::{scaii_packet, AgentCfg, AgentEndpoint, cfg, Cfg, CoreEndpoint, Entity, ExplanationPoint, Layer,
              MultiMessage, ScaiiPacket, BackendEndpoint, ModuleEndpoint, ReplayEndpoint, RecorderConfig, RecorderEndpoint,
              ReplayStep, ReplaySessionConfig, Viz, VizInit};
 use protos::cfg::WhichModule;
@@ -102,14 +102,15 @@ impl ReplayManager  {
         let header: ReplayAction = self.replay_data.remove(0);
         self.configure_as_per_header(header)?;
         let steps = self.replay_data.len() as i64;
-        let mm = wrap_packet_in_multi_message(self.create_replay_session_config_message(steps));
+        let explanation_points : Vec<ExplanationPoint> = find_all_explanation_points(&self.replay_data)?;
+        let mm = wrap_packet_in_multi_message(self.create_replay_session_config_message(steps, explanation_points));
         self.env.route_messages(&mm);
         self.env.update();
 
         self.run_and_poll()
     }
 
-    fn create_replay_session_config_message(&mut self, steps : i64) -> ScaiiPacket {
+    fn create_replay_session_config_message(&mut self, steps : i64, explanation_points: Vec<ExplanationPoint>) -> ScaiiPacket {
         ScaiiPacket {
             src: protos::Endpoint {
                 endpoint: Some(Endpoint::Replay(ReplayEndpoint {})),
@@ -117,7 +118,7 @@ impl ReplayManager  {
             dest: protos::Endpoint {
                 endpoint: Some(Endpoint::Backend(BackendEndpoint {})),
             },
-            specific_msg: Some(SpecificMsg::ReplaySessionConfig( ReplaySessionConfig { step_count: steps})),
+            specific_msg: Some(SpecificMsg::ReplaySessionConfig( ReplaySessionConfig { step_count: steps, explanations: explanation_points})),
         }
     }
 
@@ -572,6 +573,45 @@ impl ReplayManager  {
     }
 }
 
+fn find_all_explanation_points(replay_actions: &Vec<ReplayAction>) -> Result<Vec<ExplanationPoint>, Box<Error>> {
+        let mut explanation_points : Vec<ExplanationPoint> = Vec::new();
+        for replay_action in replay_actions.iter() {
+            match replay_action {
+                &ReplayAction::Header(_) => {},
+                &ReplayAction::Delta(ref game_action) => {
+                    extract_explanation_point(game_action, &mut explanation_points)?;
+                }
+                &ReplayAction::Keyframe(ref _ser_info,ref game_action)=> {
+                    extract_explanation_point(game_action, &mut explanation_points)?;
+                }
+            }
+        }
+        Ok(explanation_points)
+    }
+
+fn extract_explanation_point(game_action: &GameAction, exp_points: &mut Vec<ExplanationPoint>) -> Result<(), Box<Error>>{
+        match game_action {
+            &GameAction::Step => Ok(()),
+            &GameAction::DecisionPoint(ref serialized_protos_action) => {
+                let protos_action_decode_result = protos::Action::decode(&serialized_protos_action.data);
+                match protos_action_decode_result {
+                    Ok(protos_action) => {
+                        match protos_action.explanation {
+                            Some(explanation_point) => {
+                                exp_points.push(explanation_point.clone());
+                                Ok(())
+                            },
+                            None => Ok(())
+                        }
+                    }
+                    Err(err) => {
+                        Err(Box::new(ReplayError::new(format!("Error encountered trying to decode protos::Action while collecting ExplanationPoints: {:?}", err.description()).as_str())))
+                    }
+                }
+            }
+        }
+    }
+
 fn wait(milliseconds : u64) {
     let delay = time::Duration::from_millis(milliseconds);
     thread::sleep(delay);
@@ -966,7 +1006,7 @@ fn main() {
             replay_info = get_test_mode_replay_info(step_count,interval).expect("Error - problem generating test replay_info");
         }
         RunMode::Live => {
-            println!("Live run mode not yet implemented...");
+            replay_info = load_replay_info_from_recorder_produced_file().expect("Error - problem generating replay_info from replay file");
             return;
         }
     }
@@ -992,7 +1032,7 @@ fn main() {
     match run_mode {
         RunMode::TestUsingDataFromFileGeneratedByRecorder | 
         RunMode::TestUsingDataGeneratedLocally => replay_manager.test_mode = true,
-        RunMode::Live =>                                     replay_manager.test_mode = false,
+        RunMode::Live => replay_manager.test_mode = false,
     }
     let result = replay_manager.start();
     match result {
@@ -1054,6 +1094,9 @@ impl MockRts {
     }
 
     fn create_test_viz_init(&mut self, width: u32, height: u32) -> ScaiiPacket {
+        let mut exp_vec : Vec<ExplanationPoint> = Vec::new();
+        let bogus_exp_pt = generate_test_explanation_point();
+        exp_vec.push(bogus_exp_pt);
         ScaiiPacket {
             src: protos::Endpoint {
                 endpoint: Some(Endpoint::Agent(AgentEndpoint {})),
@@ -1068,7 +1111,7 @@ impl MockRts {
                 step_count: Some(self.step_count),
                 gameboard_width: Some(width),
                 gameboard_height: Some(height),
-                explanations : Vec::new(),
+                explanations : exp_vec,
             })),
         }
     }
@@ -1093,7 +1136,7 @@ impl Module for MockRts {
                     self.sent_viz_init= true;
                 }
             },
-            Some(scaii_packet::SpecificMsg::ReplaySessionConfig(protos::ReplaySessionConfig { step_count: steps })) => {
+            Some(scaii_packet::SpecificMsg::ReplaySessionConfig(protos::ReplaySessionConfig { step_count: steps, explanations: ref _explanation_vec })) => {
                 self.step_count = steps as u32;
                 self.init_entity_sequence();
             },
@@ -1150,6 +1193,39 @@ impl Module for MockRts {
                 packets: Vec::new(),
             },
         )
+    }
+}
+
+fn generate_test_explanation_point() -> ExplanationPoint {
+    let mut layer_vec : Vec<Layer> = Vec::new();
+    let layer = generate_test_layer();
+    layer_vec.push(layer);
+    ExplanationPoint {
+        step: Some(0),
+        id :  Some(5),
+        title : Some(String::from("saliency")),
+        description : Some(String::from("bogus explanation point for saliency viewing test")),
+        layers : layer_vec,
+    }
+}
+
+fn generate_test_layer() -> Layer {
+    let mut cell_values : Vec<f64> = Vec::new();
+    let x_max = 400;
+    let y_max = 2;
+    for x in 0..x_max {
+        for y in 0..y_max {
+            let product = (x * y) as f64;
+            let value : f64 = product / (x_max * y_max) as f64;
+            cell_values.push(value);
+        }
+    }
+    println!("length of cell_values = {}", cell_values.len());
+    Layer {
+        name: Some(String::from("test layer 1")),
+        cells: cell_values,
+        width : Some(x_max),
+        length: Some(y_max),
     }
 }
 
